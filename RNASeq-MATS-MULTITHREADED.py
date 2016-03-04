@@ -4,6 +4,7 @@
 
 ### import necessary libraries
 import re,os,sys,logging,time,datetime;
+import threading, Queue;
 
 ### checking out the python version
 if sys.version_info < (2,6) or sys.version_info >= (3,0):
@@ -54,6 +55,8 @@ MacOS = 0; ## by default, not a MacOS
 if os.uname()[0]=="Darwin": ## it is Mac OS
   MacOS=1; ## MacOS is true
 keepTemp = 0; ## by default, do not keep temp
+
+
 
 ### checking out the argument names
 validArgList=['-s1','-b1','-s2','-b2','-gtf','-bi','-o','-t','-len','-a','-r1','-r2','-sd1','-sd2','-c','-analysis','-expressionChange','-keepTemp'];
@@ -121,6 +124,15 @@ for paramIndex in range(1,len(sys.argv)): ## going through the all parameters
 #  else: ### not valid param.. exit
 #    print("Not a valid param detected: %s" % sys.argv[paramIndex]);
 #    sys.exit();
+
+if os.getenv('SLURM_CPUS_PER_TASK') != None:
+    nthreads = int(os.getenv('SLURM_CPUS_PER_TASK'))
+else: 
+    nthreads = 1
+
+threadQueue = Queue.Queue(nthreads)
+success=0
+fail=1
 
 ### checking out the required arguments
 if (s1=='' or  s2=='' or  gtf=='' or bIndex=='' or outDir=='' or readLength==0 or readType==''): ### at least one required param is missing
@@ -334,9 +346,87 @@ def doTophatMapping(): ## do tophat mapping
   return;
 ##### end of doTophatMapping ####
 
-def getUniqueSAM(): ## getting uniquely mapped reads or pairs
-  logging.debug("getting unique SAM function..");
+def getOneUniqueSAM(replicateID, sampleID, replicateValue):
 
+  if sampleID == '1':
+    rTempFolder = s1rPath+str(sampleID+1);
+  else :
+    rTempFolder = s2rPath+str(sampleID+1);
+
+  cmd = '';
+  if SEPE=='PE': ## paired-end
+    if bamFile==0:
+      cmd += 'samtools view -h '+rTempFolder+'/accepted_hits.bam';
+    else: ## bam file is provided
+      cmd += 'samtools view -h '+replicateValue;
+    cmd += ' | awk -F"\\t" \'(($0 ~ "NH:i:1[^0-9]"||$0 ~ "NH:i:1$") && ((and($2,0x2))&&($6=="'+str(readLength)+'M"||($6~"N"&&$6!~"D"&&$6!~"I"))) )|| NF<7\' > ' +rTempFolder+'/unique.S' + sampleID + '.sam'; ## genome, junction reads and header
+  else: ## single-end
+    if bamFile==0:
+      cmd += 'samtools view -h '+rTempFolder+'/accepted_hits.bam';
+    else:
+      cmd += 'samtools view -h '+ replicateValue;
+    cmd += ' | awk -F"\\t" \'(($0 ~ "NH:i:1[^0-9]"||$0 ~ "NH:i:1$") && ($6=="'+str(readLength)+'M"||($6~"N"&&$6!~"D"&&$6!~"I")) )|| NF<7\' > ' +rTempFolder+'/unique.S' + sampleID + '.sam'; ## genome, junction reads and header
+  oFile.write('######  getting unique reads or pairs for sample_{0}, replicate_'.format(sampleID) + str(replicatedID+1)+'#####\n'+cmd+'\n#\n');
+  oFile.flush();
+  status,output=commands.getstatusoutput(cmd);
+  logging.debug("getting uniquely mapped reads or pairs for sample_{0}, rep_{1} is done with status {2}".format(sampleID, replicateID + 1, status));
+  if (int(status)!=0): ## it did not go well
+    errorMessage = "error in getting uniquely mapped reads from sample_{0}, rep_{1}: {2}\n".format(sampleID, replicatedID + 1,status)
+    errorMessage = errorMessage + "error detail: {0}\n".format(output)
+    errorMessage = errorMessage + "Retry up to 3 more times..\n"
+    logging.debug(errorMessage);
+    for rp in range(0,3): ## try up to 3 more times
+      logging.debug("Retrying for sample_{0}, rep_{1}, trial: {2}\n".format(sampleID, replicatedID + 1,rp+1))
+      status,output=commands.getstatusoutput(cmd);
+      logging.debug("getting uniquely mapped reads or pairs for sample_{0}, rep_{1} is done with status {2}".format(sampleID, replicateID + 1, status));
+      if (int(status)==0): ## worked okay
+        break; ## break for loop
+      else: ### error
+        errorMessage = "error in getting uniquely mapped reads from sample_{0}, rep_{1}: {2}\n".format(sampleID, replicatedID + 1,status)
+        errorMessage = errorMessage + "error detail: {0}\n".format(output)
+        logging.debug(errorMessage)
+    if (int(status)!=0): ## didn't go well in all retries
+      threadQueue.put(fail)
+      raise Exception();
+  logging.debug("output from sample_{0} replicate:{1} is: {2}".format(sampleID, replicateID +1, output):
+  threadQueue.put(success) 
+
+
+
+
+def getUniqueSAM(): ## getting uniquely mapped reads or pairs
+  logging.debug("getting unique SAM function using {0} thread(s)".format(nthreads));
+
+  lenSample1 = len(sample_1) 
+  lenSample2 = len(sample_2) 
+  sample1Jobs = zip(range(0, lenSample1), '1' * lenSample1, sample_1) 
+  sample2Jobs = zip(range(0, lenSample2), '2' * lenSample2, sample_2) 
+  samtoolsJobs =  sample1Jobs + sample2Jobs
+
+  nthreads = 
+  #Run the jobs in a batch equal to the number of available threads  
+  #This is done to make sure the program stops if an exception is raised
+  while len(samtoolsJobs)  > 0:
+    toExecute = samtoolsJobs[0:nthreads]
+    threadList = []
+    for thread in range(nthreads):
+        t =  threading.Thread(target=getOneUniqueSAM, args = toExecute[thread] )
+        threadList.append(t)
+        t.start()
+    
+    #Join the threads before continuing
+    for thread in range(nthreads):
+        threadList[thread].join()  
+
+    #Check that all the threads executed successfully.
+    for thread in range(nthreads):
+        if threadQueue.get() != success:
+            raise Exception()
+        #Make sure the queue is empty
+
+    #Remove the executed threads from the jobList
+        samtoolsJobs = samtoolsJobs[4:] 
+          
   for rr in range(0,len(sample_1)): ## for each replicate of sample_1
     rTempFolder = s1rPath+str(rr+1);
     cmd = '';
