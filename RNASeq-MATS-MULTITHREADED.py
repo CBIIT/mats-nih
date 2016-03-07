@@ -173,7 +173,7 @@ if bamFile==1 and ( ((sample_1[0].split('.'))[-1].strip()).upper() !='BAM' or ((
   sys.exit();
 
 
-####### checking readLength ##########
+###### checking readLength ##########
 if bamFile==0: ## fastq file was provided
   for fq in sample_1: ## examine each file
     fpfp=[];
@@ -301,6 +301,8 @@ for fki in range(0,len(sample_2)): ## for each replicate of sample_2
   
 logging.debug("#########################################################################\n");
 
+
+
 ########## functions here... ############
 
 def doTophatMapping(): ## do tophat mapping
@@ -349,9 +351,9 @@ def doTophatMapping(): ## do tophat mapping
 def getOneUniqueSAM(replicateID, sampleID, replicateValue):
 
   if sampleID == '1':
-    rTempFolder = s1rPath+str(sampleID+1);
+    rTempFolder = s1rPath+str(replicateID+1);
   else :
-    rTempFolder = s2rPath+str(sampleID+1);
+    rTempFolder = s2rPath+str(replicateID+1);
 
   cmd = '';
   if SEPE=='PE': ## paired-end
@@ -366,29 +368,29 @@ def getOneUniqueSAM(replicateID, sampleID, replicateValue):
     else:
       cmd += 'samtools view -h '+ replicateValue;
     cmd += ' | awk -F"\\t" \'(($0 ~ "NH:i:1[^0-9]"||$0 ~ "NH:i:1$") && ($6=="'+str(readLength)+'M"||($6~"N"&&$6!~"D"&&$6!~"I")) )|| NF<7\' > ' +rTempFolder+'/unique.S' + sampleID + '.sam'; ## genome, junction reads and header
-  oFile.write('######  getting unique reads or pairs for sample_{0}, replicate_'.format(sampleID) + str(replicatedID+1)+'#####\n'+cmd+'\n#\n');
+  oFile.write('######  getting unique reads or pairs for sample_{0}, replicate_'.format(sampleID) + str(replicateID+1)+'#####\n'+cmd+'\n#\n');
   oFile.flush();
   status,output=commands.getstatusoutput(cmd);
   logging.debug("getting uniquely mapped reads or pairs for sample_{0}, rep_{1} is done with status {2}".format(sampleID, replicateID + 1, status));
   if (int(status)!=0): ## it did not go well
-    errorMessage = "error in getting uniquely mapped reads from sample_{0}, rep_{1}: {2}\n".format(sampleID, replicatedID + 1,status)
+    errorMessage = "error in getting uniquely mapped reads from sample_{0}, rep_{1}: {2}\n".format(sampleID, replicateID + 1,status)
     errorMessage = errorMessage + "error detail: {0}\n".format(output)
     errorMessage = errorMessage + "Retry up to 3 more times..\n"
     logging.debug(errorMessage);
     for rp in range(0,3): ## try up to 3 more times
-      logging.debug("Retrying for sample_{0}, rep_{1}, trial: {2}\n".format(sampleID, replicatedID + 1,rp+1))
+      logging.debug("Retrying for sample_{0}, rep_{1}, trial: {2}\n".format(sampleID, replicateID + 1,rp+1))
       status,output=commands.getstatusoutput(cmd);
       logging.debug("getting uniquely mapped reads or pairs for sample_{0}, rep_{1} is done with status {2}".format(sampleID, replicateID + 1, status));
       if (int(status)==0): ## worked okay
         break; ## break for loop
       else: ### error
-        errorMessage = "error in getting uniquely mapped reads from sample_{0}, rep_{1}: {2}\n".format(sampleID, replicatedID + 1,status)
+        errorMessage = "error in getting uniquely mapped reads from sample_{0}, rep_{1}: {2}\n".format(sampleID, replicateID + 1,status)
         errorMessage = errorMessage + "error detail: {0}\n".format(output)
         logging.debug(errorMessage)
     if (int(status)!=0): ## didn't go well in all retries
       threadQueue.put(fail)
-      raise Exception();
-  logging.debug("output from sample_{0} replicate:{1} is: {2}".format(sampleID, replicateID +1, output):
+      #raise Exception();
+  logging.debug("output from sample_{0} replicate:{1} is: {2}".format(sampleID, replicateID +1, output))
   threadQueue.put(success) 
 
 
@@ -403,103 +405,108 @@ def getUniqueSAM(): ## getting uniquely mapped reads or pairs
   sample2Jobs = zip(range(0, lenSample2), '2' * lenSample2, sample_2) 
   samtoolsJobs =  sample1Jobs + sample2Jobs
 
-  nthreads = 
   #Run the jobs in a batch equal to the number of available threads  
   #This is done to make sure the program stops if an exception is raised
   while len(samtoolsJobs)  > 0:
     toExecute = samtoolsJobs[0:nthreads]
+    nJobs = len(toExecute)
+    print toExecute 
+    print nJobs
     threadList = []
-    for thread in range(nthreads):
+    for thread in range(nJobs):
         t =  threading.Thread(target=getOneUniqueSAM, args = toExecute[thread] )
         threadList.append(t)
         t.start()
     
     #Join the threads before continuing
-    for thread in range(nthreads):
+    for thread in range(nJobs):
         threadList[thread].join()  
 
     #Check that all the threads executed successfully.
-    for thread in range(nthreads):
+    if threadQueue.qsize() != nJobs:
+        logging.debug("ERROR: Not all samtools calls returned successfully.")
+        exit()
+    for thread in range(nJobs):
         if threadQueue.get() != success:
             raise Exception()
-        #Make sure the queue is empty
 
     #Remove the executed threads from the jobList
-        samtoolsJobs = samtoolsJobs[4:] 
-          
-  for rr in range(0,len(sample_1)): ## for each replicate of sample_1
-    rTempFolder = s1rPath+str(rr+1);
-    cmd = '';
-    if SEPE=='PE': ## paired-end
-      if bamFile==0:
-        cmd += 'samtools view -h '+rTempFolder+'/accepted_hits.bam';
-      else: ## bam file is provided
-        cmd += 'samtools view -h '+sample_1[rr];
-      cmd += ' | awk -F"\\t" \'(($0 ~ "NH:i:1[^0-9]"||$0 ~ "NH:i:1$") && ((and($2,0x2))&&($6=="'+str(readLength)+'M"||($6~"N"&&$6!~"D"&&$6!~"I"))) )|| NF<7\' > ' +rTempFolder+'/unique.S1.sam'; ## genome, junction reads and header
-    else: ## single-end
-      if bamFile==0:
-        cmd += 'samtools view -h '+rTempFolder+'/accepted_hits.bam';
-      else:
-        cmd += 'samtools view -h '+sample_1[rr];
-      cmd += ' | awk -F"\\t" \'(($0 ~ "NH:i:1[^0-9]"||$0 ~ "NH:i:1$") && ($6=="'+str(readLength)+'M"||($6~"N"&&$6!~"D"&&$6!~"I")) )|| NF<7\' > ' +rTempFolder+'/unique.S1.sam'; ## genome, junction reads and header
-    oFile.write('######  getting unique reads or pairs for sample_1, replicate_'+ str(rr+1)+'#####\n'+cmd+'\n#\n');
-    oFile.flush();
-    status,output=commands.getstatusoutput(cmd);
-    logging.debug("getting uniquely mapped reads or pairs for sample_1, rep_%d is done with status %s" % ((rr+1),status));
-    if (int(status)!=0): ## it did not go well
-      logging.debug("error in getting uniquely mapped reads from smaple_1, rep_%d: %s" % ((rr+1),status));
-      logging.debug("error detail: %s" % output);
-      logging.debug("Retry up to 3 more times..");
-      for rp in range(0,3): ## try up to 3 more times
-        logging.debug("Retry: " + str(rp+1));
-        status,output=commands.getstatusoutput(cmd);
-        logging.debug("getting uniquely mapped reads or pairs for sample_1, rep_%d is done with status %s" % ((rr+1),status));
-        if (int(status)==0): ## worked okay
-          break; ## break for loop
-        else: ### error
-          logging.debug("error in getting uniquely mapped reads from smaple_1, rep_%d: %s" % ((rr+1),status));
-          logging.debug("error detail: %s" % output);
-      if (int(status)!=0): ## didn't go well in all retries
-        raise Exception();
-    logging.debug(output);
-
-  for rr in range(0,len(sample_2)): ## for each replicate of sample_2
-    rTempFolder = s2rPath+str(rr+1);
-    cmd = '';
-    if SEPE=='PE': ## paired-end
-      if bamFile==0:
-        cmd += 'samtools view -h '+rTempFolder+'/accepted_hits.bam';
-      else: ## bam file is provided
-        cmd += 'samtools view -h '+sample_2[rr];
-      cmd += ' | awk -F"\\t" \'(($0 ~ "NH:i:1[^0-9]"||$0 ~ "NH:i:1$") && ((and($2,0x2))&&($6=="'+str(readLength)+'M"||($6~"N"&&$6!~"D"&&$6!~"I"))) )|| NF<7\' > ' +rTempFolder+'/unique.S2.sam'; ## genome, junction reads and header
-    else: ## single-end
-      if bamFile==0:
-        cmd += 'samtools view -h '+rTempFolder+'/accepted_hits.bam';
-      else:
-        cmd += 'samtools view -h '+sample_2[rr];
-      cmd += ' | awk -F"\\t" \'(($0 ~ "NH:i:1[^0-9]"||$0 ~ "NH:i:1$") && ($6=="'+str(readLength)+'M"||($6~"N"&&$6!~"D"&&$6!~"I")) )|| NF<7\' > ' +rTempFolder+'/unique.S2.sam'; ## genome, junction reads and header
-    oFile.write('######  getting unique reads or pairs for sample_2, replicate_'+ str(rr+1)+'#####\n'+cmd+'\n#\n');
-    oFile.flush();
-    status,output=commands.getstatusoutput(cmd);
-    logging.debug("getting uniquely mapped reads or pairs for sample_2, rep_%d is done with status %s" % ((rr+1),status));
-    if (int(status)!=0): ## it did not go well
-      logging.debug("error in getting uniquely mapped reads from smaple_2, rep_%d: %s" % ((rr+1),status));
-      logging.debug("error detail: %s" % output);
-      logging.debug("Retry up to 3 more times..");
-      for rp in range(0,3): ## try up to 3 more times
-        logging.debug("Retry: " + str(rp+1));
-        status,output=commands.getstatusoutput(cmd);
-        logging.debug("getting uniquely mapped reads or pairs for sample_2, rep_%d is done with status %s" % ((rr+1),status));
-        if (int(status)==0): ## worked okay
-          break; ## break for loop
-        else: ### error
-          logging.debug("error in getting uniquely mapped reads from smaple_2, rep_%d: %s" % ((rr+1),status));
-          logging.debug("error detail: %s" % output);
-      if (int(status)!=0): ## didn't go well in all retries             
-        raise Exception();
-    logging.debug(output);
+    samtoolsJobs = samtoolsJobs[nJobs:] 
 
   return;
+#          
+#  for rr in range(0,len(sample_1)): ## for each replicate of sample_1
+#    rTempFolder = s1rPath+str(rr+1);
+#    cmd = '';
+#    if SEPE=='PE': ## paired-end
+#      if bamFile==0:
+#        cmd += 'samtools view -h '+rTempFolder+'/accepted_hits.bam';
+#      else: ## bam file is provided
+#        cmd += 'samtools view -h '+sample_1[rr];
+#      cmd += ' | awk -F"\\t" \'(($0 ~ "NH:i:1[^0-9]"||$0 ~ "NH:i:1$") && ((and($2,0x2))&&($6=="'+str(readLength)+'M"||($6~"N"&&$6!~"D"&&$6!~"I"))) )|| NF<7\' > ' +rTempFolder+'/unique.S1.sam'; ## genome, junction reads and header
+#    else: ## single-end
+#      if bamFile==0:
+#        cmd += 'samtools view -h '+rTempFolder+'/accepted_hits.bam';
+#      else:
+#        cmd += 'samtools view -h '+sample_1[rr];
+#      cmd += ' | awk -F"\\t" \'(($0 ~ "NH:i:1[^0-9]"||$0 ~ "NH:i:1$") && ($6=="'+str(readLength)+'M"||($6~"N"&&$6!~"D"&&$6!~"I")) )|| NF<7\' > ' +rTempFolder+'/unique.S1.sam'; ## genome, junction reads and header
+#    oFile.write('######  getting unique reads or pairs for sample_1, replicate_'+ str(rr+1)+'#####\n'+cmd+'\n#\n');
+#    oFile.flush();
+#    status,output=commands.getstatusoutput(cmd);
+#    logging.debug("getting uniquely mapped reads or pairs for sample_1, rep_%d is done with status %s" % ((rr+1),status));
+#    if (int(status)!=0): ## it did not go well
+#      logging.debug("error in getting uniquely mapped reads from smaple_1, rep_%d: %s" % ((rr+1),status));
+#      logging.debug("error detail: %s" % output);
+#      logging.debug("Retry up to 3 more times..");
+#      for rp in range(0,3): ## try up to 3 more times
+#        logging.debug("Retry: " + str(rp+1));
+#        status,output=commands.getstatusoutput(cmd);
+#        logging.debug("getting uniquely mapped reads or pairs for sample_1, rep_%d is done with status %s" % ((rr+1),status));
+#        if (int(status)==0): ## worked okay
+#          break; ## break for loop
+#        else: ### error
+#          logging.debug("error in getting uniquely mapped reads from smaple_1, rep_%d: %s" % ((rr+1),status));
+#          logging.debug("error detail: %s" % output);
+#      if (int(status)!=0): ## didn't go well in all retries
+#        raise Exception();
+#    logging.debug(output);
+#
+#  for rr in range(0,len(sample_2)): ## for each replicate of sample_2
+#    rTempFolder = s2rPath+str(rr+1);
+#    cmd = '';
+#    if SEPE=='PE': ## paired-end
+#      if bamFile==0:
+#        cmd += 'samtools view -h '+rTempFolder+'/accepted_hits.bam';
+#      else: ## bam file is provided
+#        cmd += 'samtools view -h '+sample_2[rr];
+#      cmd += ' | awk -F"\\t" \'(($0 ~ "NH:i:1[^0-9]"||$0 ~ "NH:i:1$") && ((and($2,0x2))&&($6=="'+str(readLength)+'M"||($6~"N"&&$6!~"D"&&$6!~"I"))) )|| NF<7\' > ' +rTempFolder+'/unique.S2.sam'; ## genome, junction reads and header
+#    else: ## single-end
+#      if bamFile==0:
+#        cmd += 'samtools view -h '+rTempFolder+'/accepted_hits.bam';
+#      else:
+#        cmd += 'samtools view -h '+sample_2[rr];
+#      cmd += ' | awk -F"\\t" \'(($0 ~ "NH:i:1[^0-9]"||$0 ~ "NH:i:1$") && ($6=="'+str(readLength)+'M"||($6~"N"&&$6!~"D"&&$6!~"I")) )|| NF<7\' > ' +rTempFolder+'/unique.S2.sam'; ## genome, junction reads and header
+#    oFile.write('######  getting unique reads or pairs for sample_2, replicate_'+ str(rr+1)+'#####\n'+cmd+'\n#\n');
+#    oFile.flush();
+#    status,output=commands.getstatusoutput(cmd);
+#    logging.debug("getting uniquely mapped reads or pairs for sample_2, rep_%d is done with status %s" % ((rr+1),status));
+#    if (int(status)!=0): ## it did not go well
+#      logging.debug("error in getting uniquely mapped reads from smaple_2, rep_%d: %s" % ((rr+1),status));
+#      logging.debug("error detail: %s" % output);
+#      logging.debug("Retry up to 3 more times..");
+#      for rp in range(0,3): ## try up to 3 more times
+#        logging.debug("Retry: " + str(rp+1));
+#        status,output=commands.getstatusoutput(cmd);
+#        logging.debug("getting uniquely mapped reads or pairs for sample_2, rep_%d is done with status %s" % ((rr+1),status));
+#        if (int(status)==0): ## worked okay
+#          break; ## break for loop
+#        else: ### error
+#          logging.debug("error in getting uniquely mapped reads from smaple_2, rep_%d: %s" % ((rr+1),status));
+#          logging.debug("error detail: %s" % output);
+#      if (int(status)!=0): ## didn't go well in all retries             
+#        raise Exception();
+#    logging.debug(output);
+#
 ########## end of getUniqueSAM ####
 
 
@@ -614,7 +621,7 @@ def runningMATS(asType): ## running MATS here
   allInput = tempPath+"/JCEC.RNASeq."+asType+".MATS.input.txt"; ## input for all possible events
   bothIso = tempPath + "/"+asType + ".JCEC.input.txt";  ## events with both isoforms detected
   cmd = "awk '{ split($2,ic_1,\",\"); sum_ic_1=0; for (x in ic_1) sum_ic_1 += ic_1[x]; split($4,ic_2,\",\"); sum_ic_2=0; for (x in ic_2) sum_ic_2 += ic_2[x]; split($3,sc_1,\",\"); sum_sc_1=0; for (x in sc_1) sum_sc_1 += sc_1[x]; split($5,sc_2,\",\"); sum_sc_2=0; for (x in sc_2) sum_sc_2 += sc_2[x]; if ( NR==1 || ( (sum_ic_2 + sum_sc_2 > 0) && (sum_ic_1 + sum_sc_1 > 0) && (sum_ic_1 != 0 || sum_ic_2 != 0) && (sum_sc_1 != 0 || sum_sc_2 != 0) && $6!=0 && $7!=0 ) ) {print $0}}' " + allInput+" > " + bothIso;
-  cmd += ";"+scriptPath+"/MATS/rMATS.sh -d "+bothIso+" -o "+tempPath+"/"+asType+"out_JCEC/ -c "+str(c)+" -p 8 -t "+analysis;
+  cmd += ";"+scriptPath+"/MATS/rMATS.sh -d "+bothIso+" -o "+tempPath+"/"+asType+"out_JCEC/ -c "+str(c)+" -p  8 -t "+analysis;
   oFile.write('###### running MATS input for ' + asType + ' using Junction Counts and Reads on target Exon Counts #####\n'+cmd+'\n#\n');
   oFile.flush();
   status,output=commands.getstatusoutput(cmd);
