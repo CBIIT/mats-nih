@@ -260,7 +260,8 @@ logging.debug('rMATS version: %s' % MATS_ver);
 logging.debug('Start the program with [%s]\n', listToString(sys.argv));
 startTime = time.time();
 
-scriptPath = os.path.abspath(os.path.dirname(__file__));  ## absolute script path
+#TODO restore script path
+scriptPath = "/usr/local/apps/mats/3.0.9/" #os.path.abspath(os.path.dirname(__file__));  ## absolute script path
 binPath = scriptPath + '/bin';  ## absolute bin path
 outPath = os.path.abspath(outDir); ## absolute output path
 
@@ -572,7 +573,8 @@ def old_runningMATS(asType): ## running MATS here
   allInput = tempPath+"/filtered.JC.RNASeq."+asType+".MATS.input.txt"; ## input for all possible events
   bothIso = tempPath + "/"+asType + ".JC.input.txt";  ## events with both isoforms detected
   cmd = "awk '{ split($2,ic_1,\",\"); sum_ic_1=0; for (x in ic_1) sum_ic_1 += ic_1[x]; split($4,ic_2,\",\"); sum_ic_2=0; for (x in ic_2) sum_ic_2 += ic_2[x]; split($3,sc_1,\",\"); sum_sc_1=0; for (x in sc_1) sum_sc_1 += sc_1[x]; split($5,sc_2,\",\"); sum_sc_2=0; for (x in sc_2) sum_sc_2 += sc_2[x]; if ( NR==1 || ( (sum_ic_2 + sum_sc_2 > 0) && (sum_ic_1 + sum_sc_1 > 0) && (sum_ic_1 != 0 || sum_ic_2 != 0) && (sum_sc_1 != 0 || sum_sc_2 != 0) && $6!=0 && $7!=0 ) ) {print $0}}' " + allInput+" > " + bothIso;
-  cmd += ";"+scriptPath+"/MATS/rMATS.sh -d "+bothIso+" -o "+tempPath+"/"+asType+"out_JC/ -c "+str(c)+" -p 4 -t "+analysis;
+  #GZ -p 4
+  cmd += ";"+scriptPath+"/MATS/rMATS.sh -d "+bothIso+" -o "+tempPath+"/"+asType+"out_JC/ -c "+str(c)+" -p " + str(nthreads) + " -t "+analysis;
   oFile.write('###### running MATS input for ' + asType + ' using Junction Counts only #####\n'+cmd+'\n#\n');
   oFile.flush();
   status,output=commands.getstatusoutput(cmd);
@@ -587,7 +589,8 @@ def old_runningMATS(asType): ## running MATS here
   allInput = tempPath+"/filtered.JCEC.RNASeq."+asType+".MATS.input.txt"; ## input for all possible events
   bothIso = tempPath + "/"+asType + ".JCEC.input.txt";  ## events with both isoforms detected
   cmd = "awk '{ split($2,ic_1,\",\"); sum_ic_1=0; for (x in ic_1) sum_ic_1 += ic_1[x]; split($4,ic_2,\",\"); sum_ic_2=0; for (x in ic_2) sum_ic_2 += ic_2[x]; split($3,sc_1,\",\"); sum_sc_1=0; for (x in sc_1) sum_sc_1 += sc_1[x]; split($5,sc_2,\",\"); sum_sc_2=0; for (x in sc_2) sum_sc_2 += sc_2[x]; if ( NR==1 || ( (sum_ic_2 + sum_sc_2 > 0) && (sum_ic_1 + sum_sc_1 > 0) && (sum_ic_1 != 0 || sum_ic_2 != 0) && (sum_sc_1 != 0 || sum_sc_2 != 0) && $6!=0 && $7!=0 ) ) {print $0}}' " + allInput+" > " + bothIso;
-  cmd += ";"+scriptPath+"/MATS/rMATS.sh -d "+bothIso+" -o "+tempPath+"/"+asType+"out_JCEC/ -c "+str(c)+" -p 4 -t "+analysis;
+  #GZ -p 4
+  cmd += ";"+scriptPath+"/MATS/rMATS.sh -d "+bothIso+" -o "+tempPath+"/"+asType+"out_JCEC/ -c "+str(c)+" -p " + str(nthreads) + " -t "+analysis;
   oFile.write('###### running MATS input for ' + asType + ' using Junction Counts and Reads on target Exon Counts #####\n'+cmd+'\n#\n');
   oFile.flush();
   status,output=commands.getstatusoutput(cmd);
@@ -606,7 +609,8 @@ def runningMATS(asType): ## running MATS here
   allInput = tempPath+"/JC.RNASeq."+asType+".MATS.input.txt"; ## input for all possible events
   bothIso = tempPath + "/"+asType + ".JC.input.txt";  ## events with both isoforms detected
   cmd = "awk '{ split($2,ic_1,\",\"); sum_ic_1=0; for (x in ic_1) sum_ic_1 += ic_1[x]; split($4,ic_2,\",\"); sum_ic_2=0; for (x in ic_2) sum_ic_2 += ic_2[x]; split($3,sc_1,\",\"); sum_sc_1=0; for (x in sc_1) sum_sc_1 += sc_1[x]; split($5,sc_2,\",\"); sum_sc_2=0; for (x in sc_2) sum_sc_2 += sc_2[x]; if ( NR==1 || ( (sum_ic_2 + sum_sc_2 > 0) && (sum_ic_1 + sum_sc_1 > 0) && (sum_ic_1 != 0 || sum_ic_2 != 0) && (sum_sc_1 != 0 || sum_sc_2 != 0) && $6!=0 && $7!=0 ) ) {print $0}}' " + allInput+" > " + bothIso;
-  cmd += ";"+scriptPath+"/MATS/rMATS.sh -d "+bothIso+" -o "+tempPath+"/"+asType+"out_JC/ -c "+str(c)+" -p 4 -t "+analysis;
+  #GZ -p 4
+  cmd += ";"+scriptPath+"/MATS/rMATS.sh -d "+bothIso+" -o "+tempPath+"/"+asType+"out_JC/ -c "+str(c)+" -p " + str(nthreads) + " -t "+analysis;
   oFile.write('###### running MATS input for ' + asType + ' using Junction Counts only #####\n'+cmd+'\n#\n');
   oFile.flush();
   status,output=commands.getstatusoutput(cmd);
@@ -621,7 +625,9 @@ def runningMATS(asType): ## running MATS here
   allInput = tempPath+"/JCEC.RNASeq."+asType+".MATS.input.txt"; ## input for all possible events
   bothIso = tempPath + "/"+asType + ".JCEC.input.txt";  ## events with both isoforms detected
   cmd = "awk '{ split($2,ic_1,\",\"); sum_ic_1=0; for (x in ic_1) sum_ic_1 += ic_1[x]; split($4,ic_2,\",\"); sum_ic_2=0; for (x in ic_2) sum_ic_2 += ic_2[x]; split($3,sc_1,\",\"); sum_sc_1=0; for (x in sc_1) sum_sc_1 += sc_1[x]; split($5,sc_2,\",\"); sum_sc_2=0; for (x in sc_2) sum_sc_2 += sc_2[x]; if ( NR==1 || ( (sum_ic_2 + sum_sc_2 > 0) && (sum_ic_1 + sum_sc_1 > 0) && (sum_ic_1 != 0 || sum_ic_2 != 0) && (sum_sc_1 != 0 || sum_sc_2 != 0) && $6!=0 && $7!=0 ) ) {print $0}}' " + allInput+" > " + bothIso;
-  cmd += ";"+scriptPath+"/MATS/rMATS.sh -d "+bothIso+" -o "+tempPath+"/"+asType+"out_JCEC/ -c "+str(c)+" -p  8 -t "+analysis;
+
+  #GZ -p 8
+  cmd += ";"+scriptPath+"/MATS/rMATS.sh -d "+bothIso+" -o "+tempPath+"/"+asType+"out_JCEC/ -c "+str(c)+" -p  "+ str(nthreads) + " -t "+analysis;
   oFile.write('###### running MATS input for ' + asType + ' using Junction Counts and Reads on target Exon Counts #####\n'+cmd+'\n#\n');
   oFile.flush();
   status,output=commands.getstatusoutput(cmd);
