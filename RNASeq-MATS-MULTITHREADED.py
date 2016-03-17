@@ -260,8 +260,7 @@ logging.debug('rMATS version: %s' % MATS_ver);
 logging.debug('Start the program with [%s]\n', listToString(sys.argv));
 startTime = time.time();
 
-#TODO restore script path
-scriptPath = "/usr/local/apps/mats/3.0.9/" #os.path.abspath(os.path.dirname(__file__));  ## absolute script path
+scriptPath = os.path.abspath(os.path.dirname(__file__));  ## absolute script path
 binPath = scriptPath + '/bin';  ## absolute bin path
 outPath = os.path.abspath(outDir); ## absolute output path
 
