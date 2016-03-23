@@ -1,3 +1,5 @@
+#!/usr/local/bin/python
+
 #
 ## this program does deep seq data analysis
 #
@@ -211,9 +213,15 @@ else: ## bam file was provided
   for fq in sample_1: ## examine each file
 
     myCmd = 'samtools view '+fq+' | head -n 1 | awk -F"\t" \'{print length($10)}\'';
+    print myCmd
 
     status,output=commands.getstatusoutput(myCmd);
-    myLen=int(output);
+    try:
+        myLen=int(output);
+    except: 
+        print "Error: examining the {0} bam file".format(fg)
+        print "Original command:{0}".format(myCmd)
+        sys.exit();
     if myLen !=readLength: ### different readLength
       print "Incorrect readLength. %s has a read length of %d, while readLength param is %d" % (fq,myLen,readLength);
       sys.exit();
