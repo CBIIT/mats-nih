@@ -219,7 +219,7 @@ else: ## bam file was provided
     try:
         myLen=int(output);
     except: 
-        print "Error: examining the {0} bam file".format(fg)
+        print "Error: examining the {0} bam file".format(fq)
         print "Original command:{0}".format(myCmd)
         sys.exit();
     if myLen !=readLength: ### different readLength
