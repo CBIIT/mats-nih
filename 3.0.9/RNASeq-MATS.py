@@ -210,10 +210,12 @@ if bamFile==0: ## fastq file was provided
       fff.close();
 
 else: ## bam file was provided
+  print sample_1
   for fq in sample_1: ## examine each file
 
     myCmd = 'samtools view '+fq+' | head -n 1 | awk -F"\t" \'{print length($10)}\'';
     print myCmd
+    sys.stdout.flush()
 
     status,output=commands.getstatusoutput(myCmd);
     try:
