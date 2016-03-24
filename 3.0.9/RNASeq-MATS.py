@@ -214,7 +214,7 @@ else: ## bam file was provided
   for fq in sample_1: ## examine each file
 
     myCmd = 'samtools view '+fq+' | head -n 1 | awk -F"\t" \'{print length($10)}\'';
-    print myCmd
+    print time.strftime("%Y-%m-%d %H:%M") + ": " + myCmd
     sys.stdout.flush()
 
     status,output=commands.getstatusoutput(myCmd);
