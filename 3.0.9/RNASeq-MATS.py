@@ -5,8 +5,78 @@
 #
 
 ### import necessary libraries
-import re,os,sys,logging,time,datetime;
-import threading, Queue;
+import re,os,sys,logging,time,datetime
+import threading, Queue, traceback
+from pytools import executeMultithreadedJobs, success, fail, nthreads, threadQueue
+
+
+#Run a multithreaded list of jobs
+#Input1 function to be executed list of jobs
+#Input2 list of arguments to the functor as tuples
+#Functions should return either success of fail. Upon reception of a failure
+#function raises an exception
+#def executeMultithreadedJobs(functionPointer, jobList):
+#
+#  #Run the jobs in a batch equal to the number of available threads  
+#  #This is done to make sure the program stops if an exception is raised
+#  try:
+#    while len(jobList)  > 0:
+#      toExecute = jobList[0:nthreads]
+#      nJobs = len(toExecute)
+#      threadList = []
+#      for thread in range(nJobs):
+#          t =  threading.Thread(target=functionPointer, args = toExecute[thread] )
+#          threadList.append(t)
+#          t.start()
+#      
+#      #Join the threads before continuing
+#      for thread in range(nJobs):
+#          threadList[thread].join()  
+#  
+#      #Check that all the threads executed successfully.
+#      if threadQueue.qsize() != nJobs:
+#        logging.debug("ERROR: Not all thread calls returned an value. ")
+#        logging.debug("nJobs = {0}, threadQueue.qsize= {1}".format(nJobs, threadQueue.qsize()))
+#        exit()
+#      for thread in range(nJobs):
+#        if threadQueue.get() != success:
+#          logging.debug("ERROR: A thread call failed.")
+#          raise Exception()
+#  
+#      #Remove the executed threads from the jobList
+#      jobList = jobList[nJobs:] 
+#  except:  
+#    logging.debug(traceback.format_exc())
+#    exit()
+
+def listToString(x):
+  rVal = '';
+  for a in x:
+    rVal += a+' ';
+  return rVal;
+
+
+
+
+#A function to check the length of the bam file
+def bamLengthCheck(bamFileName):
+  myCmd = 'samtools view '+bamFileName+' | head -n 1 | awk -F"\t" \'{print length($10)}\'';
+  logging.debug("Verifying length of {0} bam file".format(bamFileName) )
+  sys.stdout.flush()
+  status,output=commands.getstatusoutput(myCmd);
+  logging.debug("Done verifying length of {0} bam file".format(bamFileName) )
+  try:
+    myLen=int(output);
+  except: 
+    logging.debug("Error: examining the {0} bam file".format(bamFileName))
+    logging.debug("Commnad:{0} returned status:{1} output:{2}".format(myCmd, status, output))
+    sys.stdout.flush()
+
+    threadQueue.put(fail) 
+  if myLen !=readLength: ### different readLength
+    logging.debug("Incorrect readLength. %s has a read length of %d, while readLength param is %d" % (bamFileName,myLen,readLength))
+    threadQueue.put(fail) 
+  threadQueue.put(success) 
 
 ### checking out the python version
 if sys.version_info < (2,6) or sys.version_info >= (3,0):
@@ -127,14 +197,14 @@ for paramIndex in range(1,len(sys.argv)): ## going through the all parameters
 #    print("Not a valid param detected: %s" % sys.argv[paramIndex]);
 #    sys.exit();
 
-if os.getenv('SLURM_CPUS_PER_TASK') != None:
-    nthreads = int(os.getenv('SLURM_CPUS_PER_TASK'))
-else: 
-    nthreads = 1
-
-threadQueue = Queue.Queue(nthreads)
-success=0
-fail=1
+#if os.getenv('SLURM_CPUS_PER_TASK') != None:
+#    nthreads = int(os.getenv('SLURM_CPUS_PER_TASK'))
+#else: 
+#    nthreads = 1
+#
+#threadQueue = Queue.Queue(nthreads)
+#success=0
+#fail=1
 
 ### checking out the required arguments
 if (s1=='' or  s2=='' or  gtf=='' or bIndex=='' or outDir=='' or readLength==0 or readType==''): ### at least one required param is missing
@@ -146,11 +216,20 @@ if (s1=='' or  s2=='' or  gtf=='' or bIndex=='' or outDir=='' or readLength==0 o
   sys.exit();
 
 
-def listToString(x):
-  rVal = '';
-  for a in x:
-    rVal += a+' ';
-  return rVal;
+
+os.system('mkdir -p '+ outDir);
+oFile = open(outDir+'/commands.txt', 'a'); ## file that will contain list of commands excuted here
+
+### setting up the logging format 
+logging.basicConfig(level=logging.DEBUG,
+                    format='%(asctime)s %(message)s',
+                    filename=outDir+'/log.RNASeq-MATS.'+ str(datetime.datetime.now())+'.txt' ,
+                    filemode='w')
+
+
+
+logging.debug('rMATS version: %s' % MATS_ver);
+logging.debug('Start the program with [%s]\n', listToString(sys.argv));
 
 ### process input params ####
 #
@@ -211,23 +290,18 @@ if bamFile==0: ## fastq file was provided
 
 else: ## bam file was provided
   print sample_1
-  for fq in sample_1: ## examine each file
 
-    myCmd = 'samtools view '+fq+' | head -n 1 | awk -F"\t" \'{print length($10)}\'';
-    print time.strftime("%Y-%m-%d %H:%M") + ": " + myCmd
+  bamCheckJobs = zip(sample_1)
+
+  logging.debug("Verifying the length of the bam files")
+  try:
+    executeMultithreadedJobs(bamLengthCheck, bamCheckJobs)
+  except:
+    logging.debug(sys.exc_info()[0])
+    logging.debug(traceback.format_exc())
+    logging.debug("Error: a bam file check call did not execute successfuly.")
     sys.stdout.flush()
-
-    status,output=commands.getstatusoutput(myCmd);
-    try:
-        myLen=int(output);
-    except: 
-        print "Error: examining the {0} bam file".format(fq)
-        print "Original command:{0}".format(myCmd)
-        sys.exit();
-    if myLen !=readLength: ### different readLength
-      print "Incorrect readLength. %s has a read length of %d, while readLength param is %d" % (fq,myLen,readLength);
-      sys.exit();
-
+    sys.exit()
 
 
 ## getting readLength and junctionLength here
@@ -256,18 +330,7 @@ if len(insertLength2)!=len(sample_2) or len(sigma2) != len(sample_2): ## not cor
   print("Please check -r2 and -sd2 parameters");    
   sys.exit();
 
-os.system('mkdir -p '+ outDir);
-oFile = open(outDir+'/commands.txt', 'a'); ## file that will contain list of commands excuted here
-
-### setting up the logging format 
-logging.basicConfig(level=logging.DEBUG,
-                    format='%(asctime)s %(message)s',
-                    filename=outDir+'/log.RNASeq-MATS.'+ str(datetime.datetime.now())+'.txt' ,
-                    filemode='w')
-
 ##### Getting Start Time ######
-logging.debug('rMATS version: %s' % MATS_ver);
-logging.debug('Start the program with [%s]\n', listToString(sys.argv));
 startTime = time.time();
 
 scriptPath = os.path.abspath(os.path.dirname(__file__));  ## absolute script path
@@ -414,6 +477,10 @@ def getUniqueSAM(): ## getting uniquely mapped reads or pairs
   sample1Jobs = zip(range(0, lenSample1), '1' * lenSample1, sample_1) 
   sample2Jobs = zip(range(0, lenSample2), '2' * lenSample2, sample_2) 
   samtoolsJobs =  sample1Jobs + sample2Jobs
+
+
+  executeMultithreadedJobs(getOneUniqueSAM, samtoolsJobs)
+  return
 
   #Run the jobs in a batch equal to the number of available threads  
   #This is done to make sure the program stops if an exception is raised
